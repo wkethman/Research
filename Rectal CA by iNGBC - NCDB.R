@@ -1,3 +1,5 @@
+#Evaluating disparities and long-term survival in ideal guideline-based neoadjuvant care for rectal cancer: A Multicenter, Propensity Score-Weighted Cohort Study
+
 library(psych)
 library(Rcmdr)
 library(survey)
