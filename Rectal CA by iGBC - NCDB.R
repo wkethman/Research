@@ -1,5 +1,3 @@
-#Evaluating disparities and long-term survival in ideal guideline-based neoadjuvant care for rectal cancer: A Multicenter, Propensity Score-Weighted Cohort Study
-
 library(psych)
 library(Rcmdr)
 library(survey)
@@ -15,7 +13,8 @@ library(coxphw)
 library(foreign)
 library(jskm)
 
-  dir <- "./Desktop/WK Desktop/Rectal CA - Appropriate  - NCDB/"
+  dir <- "./Desktop/WK Desktop/Rectal CA - Appropriate - NCDB/"
+  dir <- "" #Depending on working directory, right now using blank
   NCDB <- as.data.frame(read_sav(paste(dir,"NCDB_PUF_RECTUM_Nov-03-2019 - Data/NCDBPUF_Rectum.0.2016.0.sav",sep = "")))
 
   #Clean data
@@ -147,10 +146,12 @@ library(jskm)
   attach(NCDB)
     NCDB$CHEMO_RAD_IDEAL[NCDB$RAD_RECEIVED == 0 & NCDB$CHEMO_RECEIVED == 0] <- 0 #No neoadjuvant chemoradiation given
     NCDB$CHEMO_RAD_IDEAL[NCDB$RAD_RECEIVED == 1 & NCDB$CHEMO_RECEIVED == 1] <- 1 #Appropriate neoadjuvant chemoradiation given
+    NCDB$CHEMO_RAD_IDEAL[NCDB$RAD_RECEIVED == 0 & NCDB$CHEMO_RECEIVED == 1] <- 2 #Appropriate neoadjuvant chemotherapy given, no radiation
+    NCDB$CHEMO_RAD_IDEAL[NCDB$RAD_RECEIVED == 1 & NCDB$CHEMO_RECEIVED == 0] <- 3 #Appropriate neoadjuvant radiation given, no chemotherapy
+    NCDB$CHEMO_RAD_IDEAL[NCDB$RAD_RECEIVED == 2 & NCDB$CHEMO_RECEIVED == 0] <- 4 #Inappropriate dose or timing of radiation, no chemotherapy
+    NCDB$CHEMO_RAD_IDEAL[NCDB$RAD_RECEIVED == 2 & NCDB$CHEMO_RECEIVED == 1] <- 5 #Appropriate neoadjuvant chemotherapy given, inappropriate dose or timing of radiation
   detach(NCDB)
     
-  NCDB$CHEMO_RAD_IDEAL <- replace(NCDB$CHEMO_RAD_IDEAL, is.na(NCDB$CHEMO_RAD_IDEAL), 2) #Received neoadjuvant chemotherapy but NOT ideal dose
-  
   #Ideal neoadjuvant - 0, less than ideal neoadjuvant - 1  
   NCDB$IDEAL_TX <- ifelse(((NCDB$TNM_CLIN_T_COMB < 3) & (NCDB$TNM_CLIN_N_COMB == 0)),
                                 ifelse(((NCDB$RAD_RECEIVED == 0) & (NCDB$CHEMO_RECEIVED == 0)), 0, 1),
@@ -206,13 +207,14 @@ library(jskm)
   NCDB$STAGE_IDEAL[NCDB$EARLY_LATE_STAGE == 2 & NCDB$IDEAL_TX == 1] <- 4 #Late stage less than ideal
   detach(NCDB)
   
-#Filter pathogic metastatic disease
+#Filter pathologic metastatic disease
   NCDB <- subset(NCDB, NCDB$TNM_PATH_M == "")
   
 #STOP HERE FOR EITHER ANALYSIS
 
 #Evaluate variables to see if they make sense
 table(NCDB$RX_SUMM_TREATMENT_STATUS, useNA = 'ifany')
+table(NCDB$REASON_FOR_NO_SURGERY, useNA = 'ifany')
 table(NCDB$PRIMARY_SITE, useNA = 'ifany')
 table(NCDB$FACILITY_TYPE_CD, useNA = 'ifany')
 table(NCDB$FACILITY_LOCATION_CD, useNA = 'ifany')
@@ -253,6 +255,8 @@ table(NCDB$IDEAL_TX, NCDB$ONC_SUCCESS)
 table(NCDB$IDEAL_TX, NCDB$PUF_90_DAY_MORT_CD)
 table(NCDB$IDEAL_TX, NCDB$EARLY_LATE_STAGE)
 table(NCDB$STAGE_IDEAL)
+table(NCDB$STAGE_IDEAL, NCDB$REASON_FOR_NO_RADIATION)
+table(NCDB$STAGE_IDEAL, NCDB$RX_SUMM_CHEMO)
 
 summary(NCDB$SURG_DISCHARGE_DAYS)
 table(NCDB$UNPLAN_READMIT, useNA = 'ifany')
@@ -317,12 +321,12 @@ km.by.ideal <- svykm(Surv(DX_LASTCONTACT_DEATH_MONTHS, PUF_VITAL_STATUS == 0) ~ 
 text.title <- element_text(size = 12, margin = margin(t = 0, r = 0, b = 20, l = 0, unit = "pt"), hjust = 0.5)
 text.axis.x <- element_text(size = 10, margin = margin(t = 10, r = 0, b = 5, l = 0, unit = "pt"))
 text.axis.y <- element_text(size = 10, margin = margin(t = 10, r = 10, b = 10, l = 5, unit = "pt"))
-p.km <- svyjskm(km.by.ideal, ci=TRUE, ylims=c(0.5,1.0), xlims=c(0, 60), xlabs = "Time-to-event (months)", ylabs = "Survival probability", linecols="black", legendposition = c(0.3, 0.3), main="Survival analysis by ideal NCCN guideline-based care (weighted)", ystrataname = "", ystratalabs = c("iNGBC","non-iNGBC"), dashed=TRUE)
+p.km <- svyjskm(km.by.ideal, ci=TRUE, ylims=c(0.5,1.0), xlims=c(0, 60), xlabs = "Time-to-event (months)", ylabs = "Survival probability", linecols="black", legendposition = c(0.3, 0.3), main="Survival analysis by ideal guideline-based care (weighted)", ystrataname = "", ystratalabs = c("iGBC","non-iGBC"), dashed=TRUE)
 p.km + theme_bw() +
   theme(panel.grid.minor = element_blank(), plot.title = text.title, axis.text.y = text.axis.y, axis.text.x = text.axis.x, plot.margin = margin(t = 30, r = 20, b = 20, l = 20, unit = "pt"))
 ggsave(filename = paste(dir,"Manuscript/Tables - Figures/Figure - 2.pdf",sep = ""), dpi = 300, width = 8, height = 6)
 
-#Plot odds ratios
+#Plot odds ratios for primary outcommes
 text.title <- element_text(size = 12, margin = margin(t = 0, r = 0, b = 20, l = 0, unit = "pt"), hjust = 0.5)
 text.axis.x <- element_text(size = 10, margin = margin(t = 10, r = 0, b = 5, l = 0, unit = "pt"))
 text.axis.y <- element_text(size = 10, margin = margin(t = 10, r = 10, b = 10, l = 0, unit = "pt"))
@@ -341,9 +345,9 @@ p.ideal + geom_vline(aes(xintercept = 1), size = .25, linetype = "dashed") +
   scale_y_continuous(breaks = yAxis, labels = boxLabels) +
   scale_x_continuous(breaks = seq(0,2,0.5)) +
   coord_trans(x = "log10") +
-  labs(title = "Ideal NCCN guideline-based care", y = "", x = "Odds ratio (log scale)") +
-  annotate("text", x = 0.73, y = 0.4, label = "Favors iNGBC") +
-  annotate("text", x = 1.55, y = 0.4, label = "Favors non-iNGBC")
+  labs(title = "Ideal guideline-based care", y = "", x = "Odds ratio (log scale)") +
+  annotate("text", x = 0.73, y = 0.4, label = "Favors iGBC") +
+  annotate("text", x = 1.55, y = 0.4, label = "Favors non-iGBC")
 ggsave(filename = paste(dir,"Manuscript/Tables - Figures/Figure - 1.pdf",sep = ""), dpi = 300, width = 8, height = length(boxLabels))
 
 #Survival for multiple categories
@@ -370,7 +374,7 @@ km.by.stage_ideal <- svykm(Surv(DX_LASTCONTACT_DEATH_MONTHS, PUF_VITAL_STATUS ==
 text.title <- element_text(size = 12, margin = margin(t = 0, r = 0, b = 20, l = 0, unit = "pt"), hjust = 0.5)
 text.axis.x <- element_text(size = 10, margin = margin(t = 10, r = 0, b = 5, l = 0, unit = "pt"))
 text.axis.y <- element_text(size = 10, margin = margin(t = 10, r = 10, b = 10, l = 5, unit = "pt"))
-p.km <- svyjskm(km.by.stage_ideal, ci=TRUE, ylims=c(0.5,1.0), xlims=c(0, 60), xlabs = "Time-to-event (months)", ylabs = "Survival probability", linecols="black", legendposition = c(0.3, 0.3), main="Survival analysis by stage and ideal NCCN guideline-based care (weighted)", ystrataname = "", ystratalabs = c("Early stage - iNGBC","Early stage - non-iNGBC", "Later stage - iNGBC", "Later stage - non-iNGBC"), dashed=TRUE)
+p.km <- svyjskm(km.by.stage_ideal, ci=TRUE, ylims=c(0.5,1.0), xlims=c(0, 60), xlabs = "Time-to-event (months)", ylabs = "Survival probability", linecols="black", legendposition = c(0.3, 0.3), main="Survival analysis by stage and ideal guideline-based care (weighted)", ystrataname = "", ystratalabs = c("Early stage - iGBC","Early stage - non-iGBC", "Later stage - iGBC", "Later stage - non-iGBC"), dashed=TRUE)
 p.km + theme_bw() +
   theme(panel.grid.minor = element_blank(), plot.title = text.title, axis.text.y = text.axis.y, axis.text.x = text.axis.x, plot.margin = margin(t = 30, r = 20, b = 20, l = 20, unit = "pt"))
 ggsave(filename = paste(dir,"Manuscript/Tables - Figures/Figure - 3.pdf",sep = ""), dpi = 300, width = 8, height = 6)
@@ -380,12 +384,12 @@ NCDB$SEX <- factor(NCDB$SEX, levels = c(1,2), labels = c("Male","Female"))
 NCDB$SEX <- relevel(NCDB$SEX, ref = "Female")
 
 NCDB$AGE_CAT_50_65 <- factor(NCDB$AGE_CAT_50_65, levels = c(1,2,3), labels = c("<50","50-65",">65"))
-NCDB$AGE_CAT_50_65 <- relevel(NCDB$AGE_CAT_50_65, ref = "50-65") 
+NCDB$AGE_CAT_50_65 <- relevel(NCDB$AGE_CAT_50_65, ref = "<50") 
 
 NCDB$ETHNICITY <- factor(NCDB$ETHNICITY, levels = c(1,2,3,4,5), labels = c("Non-hispanic white", "Non-hispanic black", "Hispanic", "Asian/Pacific islander", "Other"))
 NCDB$ETHNICITY <- relevel(NCDB$ETHNICITY, ref = "Non-hispanic white") 
 
-NCDB$FACILITY_LOCATION_CD <- factor(NCDB$FACILITY_LOCATION_CD, levels = c(1,2,3,4,5,6,7,8,9), labels = c("New England","Middle Atlantic","South Atlantic","East North Central","East South Central","West North Centra","West South Central","Mountain","Pacific"))
+NCDB$FACILITY_LOCATION_CD <- factor(NCDB$FACILITY_LOCATION_CD, levels = c(1,2,3,4,5,6,7,8,9), labels = c("New England","Middle Atlantic","South Atlantic","East North Central","East South Central","West North Central","West South Central","Mountain","Pacific"))
 NCDB$FACILITY_LOCATION_CD <- relevel(NCDB$FACILITY_LOCATION_CD, ref = "New England") #Reference - New England
 
 NCDB$FACILITY_TYPE_CD <- factor(NCDB$FACILITY_TYPE_CD, levels = c(1,2,3,4), labels = c("Community","Comprehensive community","Academic","Integrated network"))
@@ -409,3 +413,16 @@ NCDB$EARLY_LATE_STAGE <- relevel(NCDB$EARLY_LATE_STAGE, ref = "Early") #Referenc
 ideal <- glm(NCDB$IDEAL_TX ~ NCDB$SEX + NCDB$AGE_CAT_50_65 + NCDB$ETHNICITY + NCDB$FACILITY_LOCATION_CD + NCDB$FACILITY_TYPE_CD + NCDB$NO_HSD_QUAR_16 + NCDB$INSURANCE_STATUS + NCDB$RURAL_METRO + NCDB$EARLY_LATE_STAGE + NCDB$MED_INC_QUAR_16 + NCDB$MED_INC_QUAR_16 + NCDB$CDCC_TOTAL_BEST, family = binomial)
 summary(ideal)
 OR <- exp(cbind(OR = coef(ideal), confint(ideal)))
+
+#Analysis of reasons for less than ideal neoadjuvant care for late-stage disease
+table(NCDB$STAGE_IDEAL, NCDB$REASON_FOR_NO_RADIATION)
+table(NCDB$STAGE_IDEAL, NCDB$RX_SUMM_CHEMO)
+LATE_STAGE_NOT_IDEAL <- subset(NCDB, STAGE_IDEAL == 4)
+table(LATE_STAGE_NOT_IDEAL$RAD_RECEIVED)
+table(LATE_STAGE_NOT_IDEAL$RAD_RECEIVED, LATE_STAGE_NOT_IDEAL$IDEAL_RAD_DOSE)
+table(LATE_STAGE_NOT_IDEAL$CHEMO_RECEIVED)
+table(LATE_STAGE_NOT_IDEAL$CHEMO_RAD_IDEAL)
+LATE_STAGE_NOT_IDEAL_NO_RADS <- subset(LATE_STAGE_NOT_IDEAL, (CHEMO_RAD_IDEAL == 0 | CHEMO_RAD_IDEAL == 2))
+table(LATE_STAGE_NOT_IDEAL_NO_RADS$REASON_FOR_NO_RADIATION)
+LATE_STAGE_NOT_IDEAL_NO_CHEMO <- subset(LATE_STAGE_NOT_IDEAL, (CHEMO_RAD_IDEAL == 0 | CHEMO_RAD_IDEAL == 3 | CHEMO_RAD_IDEAL == 4))
+table(LATE_STAGE_NOT_IDEAL_NO_CHEMO$RX_SUMM_CHEMO)
